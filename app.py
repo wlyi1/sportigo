@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:linkinpark1@localhost/sportigo_windows'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://sportigo:@L2DeyR$hGE4Wnf@db4free.net/sportigov1'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.secret_key = 'your-secret-key-here'  
 db = SQLAlchemy(app)
