@@ -1,0 +1,470 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-5">
+    <h1 class="mb-4">Admin Dashboard</h1>
+    
+    <!-- Navigation Tabs -->
+    <ul class="nav nav-tabs mb-4" id="adminTabs" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active" id="swimming-school-tab" data-bs-toggle="tab" href="#swimming-school" role="tab">
+                Swimming School
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="swimming-club-tab" data-bs-toggle="tab" href="#swimming-club" role="tab">
+                Swimming Club (ASA)
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="{{ url_for('admin_schedule_changes') }}" class="nav-link">Schedule Changes</a>
+        </li>
+        <li class="nav-item">
+            <a href="{{ url_for('admin_asa_attendance') }}" class="nav-link">ASA Attendance</a>
+        </li>
+    </ul>
+    
+    <!-- Tab Content -->
+    <div class="tab-content" id="adminTabContent">
+        <!-- Swimming School Tab -->
+        <div class="tab-pane fade show active" id="swimming-school" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title mb-3" style="color: #031120;">Swimming School Bookings</h3>
+                    <!-- Filters Section -->
+                    <div class="filters-section row g-3 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label" style="color: #031120;">Date</label>
+                            <input type="date" id="bookingDate" class="form-control" 
+                                   value="{{ selected_date.strftime('%Y-%m-%d') }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" style="color: #031120;">Location</label>
+                            <select id="locationFilter" class="form-select">
+                                <option value="">All Locations</option>
+                                {% for location in locations %}
+                                <option value="{{ location.id }}" 
+                                        {% if selected_location == location.id %}selected{% endif %}>
+                                    {{ location.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" style="color: #031120;">Time</label>
+                            <select id="timeFilter" class="form-select">
+                                <option value="">All Times</option>
+                                {% for time in available_times %}
+                                <option value="{{ time }}"
+                                        {% if selected_time == time %}selected{% endif %}>
+                                    {{ time }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-primary w-100" onclick="applyFilters()">
+                                <i class="fas fa-filter me-2"></i>Apply Filters
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Location Quotas -->
+                    <div class="mb-4">
+                        <h4>Today's Quotas</h4>
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        
+                                        <th>Time</th>
+                                        <th>Total Quota</th>
+                                        <th>Booked</th>
+                                        <th>Available</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="quotasTableBody">
+                                    {% for location in locations %}
+                                        {% if not selected_location or selected_location == location.id %}
+                                            {% for quota in location.quotas %}
+                                                {% if quota.day_name == selected_date.strftime('%A') %}
+                                                {% set time_str = quota.start_time.strftime('%H:%M') %}
+                                                {% if not selected_time or selected_time == time_str %}
+                                                <tr>
+                                                    
+                                                    <td>{{ time_str }} - {{ quota.end_time.strftime('%H:%M') }}</td>
+                                                    <td>{{ quota.quota }}</td>
+                                                    <td>
+                                                        {% set booked = bookings_count.get((location.id, time_str), 0) %}
+                                                        {{ booked }}
+                                                    </td>
+                                                    <td>{{ quota.quota - booked }}</td>
+                                                </tr>
+                                                {% endif %}
+                                                {% endif %}
+                                            {% endfor %}
+                                        {% endif %}
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Presence List -->
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4>Presence List</h4>
+                            <button class="btn btn-success" onclick="saveAllPresence()">
+                                <i class="fas fa-save me-2"></i>Save All Changes
+                            </button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        
+                                        <th>User</th>
+                                        <th>Status</th>
+                                        <th>Presence</th>
+                                        <th>Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="presenceTableBody">
+                                    {% for booking in daily_bookings %}
+                                    <tr data-booking-id="{{ booking.id }}" class="presence-row">
+                                        <td>{{ booking.start_time.strftime('%H:%M') }} - {{ booking.end_time.strftime('%H:%M') }}</td>
+                                        
+                                        <td>{{ booking.user.username }}</td>
+                                        <td>
+                                            <span class="badge bg-{{ 'success' if booking.payment_status == 'paid' else 'warning' }}">
+                                                {{ booking.payment_status }}
+                                            </span>
+                                        </td>                                 <td>
+                                            <select class="form-select presence-select" data-original-value="{{ booking.presence_status }}">
+                                                <option value="pending" {{ 'selected' if booking.presence_status == 'pending' }}>Pending</option>
+                                                <option value="present" {{ 'selected' if booking.presence_status == 'present' }}>Present</option>
+                                                <option value="absent" {{ 'selected' if booking.presence_status == 'absent' }}>Absent</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input type="text" class="form-control notes-input" 
+                                                   value="{{ booking.notes or '' }}"
+                                                   data-original-value="{{ booking.notes or '' }}"
+        
+                                                  placeholder="Add notes...">
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Swimming Club (ASA) Tab -->
+        <div class="tab-pane fade" id="swimming-club" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title mb-0">ASA Club Bookings</h3>
+                </div>
+                <div class="card-body">
+                    <!-- Schedule Quotas -->
+                    <div class="mb-4">
+                        <h4>Schedule Quotas</h4>
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>Day</th>
+                                        <th>Time</th>
+                                        <th>Total Quota</th>
+                                        <th>Available Quota</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for schedule in asa_schedules %}
+                                    <tr>
+                                        <td>{{ schedule.day_name | translate_day }}</td>
+                                        <td>{{ schedule.start_time.strftime('%H:%M') }} - {{ schedule.end_time.strftime('%H:%M') }}</td>
+                                        <td>{{ schedule.quota or 0 }}</td>
+                                        <td>
+                                            {% set booked = namespace(count=0) %}
+                                            {% for booking in asa_bookings %}
+                                                {% for session in booking.sessions %}
+                                                    {% if session.schedule_id == schedule.id %}
+                                                        {% set booked.count = booked.count + 1 %}
+                                                    {% endif %}
+                                                {% endfor %}
+                                            {% endfor %}
+                                            {{ (schedule.quota or 0) - booked.count }}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Bookings List -->
+                    <div>
+                        <h4>Recent Bookings</h4>
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>User</th>
+                                        <th>Package</th>
+                                        <th>Booking Date</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for booking in asa_bookings %}
+                                    <tr>
+                                        <td>{{ booking.user.username }}</td>
+                                        <td>{{ booking.package.package_name }}</td>
+                                        <td>{{ booking.booking_date.strftime('%d %B %Y') }}</td>
+                                        <td>
+                                            <span class="badge bg-{{ 'success' if booking.payment_status == 'paid' else 'warning' }}">
+                                                {{ booking.payment_status }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add this section after the regular swimming school bookings -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0">KCC Swimming Sessions Today</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Student</th>
+                        <th>Package</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for session in kcc_sessions %}
+                    <tr>
+                        <td>{{ session.start_time.strftime('%H:%M') }} - {{ session.end_time.strftime('%H:%M') }}</td>
+                        <td>{{ session.booking.user.username }}</td>
+                        <td>{{ session.booking.package.package_name }}</td>
+                        <td>
+                            <span class="badge bg-{{ session.status | status_color }}">
+                                {{ session.status | title }}
+                            </span>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('admin_kcc_attendance') }}?date={{ selected_date }}" 
+                               class="btn btn-sm btn-primary">
+                                Manage Attendance
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+.card {
+    border: none;
+    box-shadow: 0 0 20px rgba(0,0,0,0.08);
+    border-radius: 15px;
+    margin-bottom: 2rem;
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    padding: 1.5rem;
+    border-radius: 15px 15px 0 0;
+}
+
+.card-body {
+    padding: 1.5rem;
+}
+
+.nav-tabs {
+    border-bottom: 2px solid #dee2e6;
+}
+
+.nav-tabs .nav-link {
+    border: none;
+    color: #6c757d;
+    font-weight: 500;
+    padding: 1rem 1.5rem;
+    transition: all 0.3s ease;
+}
+
+.nav-tabs .nav-link:hover {
+    border: none;
+    color: #007bff;
+}
+
+.nav-tabs .nav-link.active {
+    border: none;
+    color: #007bff;
+    border-bottom: 2px solid #007bff;
+}
+
+.table {
+    margin-bottom: 0;
+}
+
+.table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+}
+
+.badge {
+    padding: 0.5em 1em;
+    font-weight: 500;
+}
+
+.presence-select {
+    width: 100px;
+}
+
+.notes-input {
+    min-width: 200px;
+}
+
+.date-picker-wrapper {
+    width: 200px;
+}
+
+select.presence-select option[value="present"] {
+    background-color: #d4edda;
+}
+
+select.presence-select option[value="absent"] {
+    background-color: #f8d7da;
+}
+
+select.presence-select option[value="pending"] {
+    background-color: #fff3cd;
+}
+
+.filters-section {
+    background-color: #f8f9fa;
+    padding: 1rem;
+    border-radius: 10px;
+    margin-top: 1rem;
+}
+
+.presence-row.modified {
+    background-color: #fff3cd !important;
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #28a745, #218838);
+    border: none;
+    box-shadow: 0 4px 15px rgba(40,167,69,0.3);
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, #218838, #1e7e34);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(40,167,69,0.4);
+}
+</style>
+
+<script>
+function applyFilters() {
+    const date = document.getElementById('bookingDate').value;
+    const location = document.getElementById('locationFilter').value;
+    const time = document.getElementById('timeFilter').value;
+    
+    let url = "{{ url_for('admin_dashboard') }}?date=" + date;
+    if (location) url += "&location=" + location;
+    if (time) url += "&time=" + time;
+    
+    window.location.href = url;
+}
+
+// Track changes in presence and notes
+document.querySelectorAll('.presence-select, .notes-input').forEach(element => {
+    element.addEventListener('change', function() {
+        const row = this.closest('.presence-row');
+        const originalValue = this.dataset.originalValue;
+        const currentValue = this.value;
+        
+        if (originalValue !== currentValue) {
+            row.classList.add('modified');
+        } else {
+            // Check if other fields in the row are modified
+            const otherModified = row.querySelector('.presence-select, .notes-input').some(
+                el => el.dataset.originalValue !== el.value
+            );
+            if (!otherModified) {
+                row.classList.remove('modified');
+            }
+        }
+    });
+});
+
+function saveAllPresence() {
+    const modifiedRows = document.querySelectorAll('.presence-row.modified');
+    const updates = Array.from(modifiedRows).map(row => ({
+        booking_id: row.dataset.bookingId,
+        presence_status: row.querySelector('.presence-select').value,
+        notes: row.querySelector('.notes-input').value
+    }));
+    
+    if (updates.length === 0) {
+        alert('No changes to save');
+        return;
+    }
+    
+    fetch("{{ url_for('update_presence_batch') }}", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ updates: updates })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update original values and remove modified class
+            modifiedRows.forEach(row => {
+                row.querySelector('.presence-select').dataset.originalValue = 
+                    row.querySelector('.presence-select').value;
+                row.querySelector('.notes-input').dataset.originalValue = 
+                    row.querySelector('.notes-input').value;
+                row.classList.remove('modified');
+            });
+            alert('Changes saved successfully!');
+        } else {
+            alert('Error saving changes');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error saving changes');
+    });
+}
+</script>
+{% endblock %}
